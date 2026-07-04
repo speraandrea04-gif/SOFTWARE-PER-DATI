@@ -20,6 +20,10 @@ Richiede Python 3.10+.
 
 ## Uso — interfaccia web (consigliato)
 
+Avvio rapido senza terminale: doppio click su **`AVVIA_WINDOWS.bat`** (Windows) oppure `bash avvia_mac_linux.sh` (Mac/Linux). Lo script installa il necessario, avvia il programma e apre il browser da solo. Nota: l'indirizzo `http://127.0.0.1:8000` funziona solo mentre il programma è in esecuzione sul proprio computer.
+
+Avvio manuale:
+
 ```bash
 uvicorn riconciliazione.web:app
 ```
