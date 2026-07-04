@@ -8,8 +8,7 @@ Confronta due file (es. estratto conto bancario e registro fatture/contabilità)
 
 ## Stato del progetto
 
-**Step 1 completato**: parsing dei file, motore di matching, esportazione Excel, CLI e dati di test.
-**Step 2 (da fare)**: interfaccia web (upload + tabella risultati filtrabile).
+Fase 1 completa: parsing dei file, motore di matching, esportazione Excel, CLI, dati di test e interfaccia web.
 
 ## Installazione
 
@@ -18,6 +17,21 @@ pip install -r requirements.txt
 ```
 
 Richiede Python 3.10+.
+
+## Uso — interfaccia web (consigliato)
+
+```bash
+uvicorn riconciliazione.web:app
+```
+
+Poi aprire **http://127.0.0.1:8000** nel browser:
+
+1. trascina (o seleziona) i due file — estratto conto e registro fatture, CSV o `.xlsx`;
+2. regola se serve le tolleranze (default ±0.01 € e ±3 giorni);
+3. premi **Riconcilia**: compaiono i conteggi delle tre categorie e la tabella riga per riga, filtrabile cliccando sui riquadri dei conteggi;
+4. **Scarica Excel** esporta il risultato (riepilogo + un foglio per categoria).
+
+Nelle opzioni avanzate si possono mappare manualmente le colonne se il riconoscimento automatico sbaglia (stessa sintassi della CLI). Nessun dato viene salvato: tutto resta in memoria.
 
 ## Uso da riga di comando
 
@@ -74,6 +88,8 @@ riconciliazione/
   matching.py   # motore di confronto e classificazione
   export.py     # esportazione risultati in Excel
   cli.py        # interfaccia a riga di comando
+  web.py        # API FastAPI (upload, risultati, download Excel)
+  static/       # pagina web (HTML/CSS/JS vanilla)
 dati_test/      # file fittizi per la validazione
-tests/          # suite pytest (unit + end-to-end)
+tests/          # suite pytest (unit + end-to-end, API incluse)
 ```

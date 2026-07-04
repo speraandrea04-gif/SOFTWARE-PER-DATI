@@ -41,9 +41,13 @@ def _riga_export(abbinamento: Abbinamento) -> dict:
     }
 
 
-def esporta_excel(risultato: RisultatoRiconciliazione, percorso: str | Path) -> Path:
-    """Scrive un file .xlsx con un foglio di riepilogo e un foglio per categoria."""
-    percorso = Path(percorso)
+def esporta_excel(risultato: RisultatoRiconciliazione, percorso) -> object:
+    """Scrive un file .xlsx con un foglio di riepilogo e un foglio per categoria.
+
+    `percorso` può essere un path oppure un buffer binario (es. io.BytesIO).
+    """
+    if isinstance(percorso, (str, Path)):
+        percorso = Path(percorso)
 
     conteggi = risultato.conteggi
     riepilogo = pd.DataFrame([
