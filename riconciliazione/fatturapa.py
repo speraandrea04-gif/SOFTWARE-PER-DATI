@@ -162,7 +162,9 @@ def _leggi_fatture_da_xml(contenuto: bytes, nome_file: str) -> list[_Fattura]:
 def _raccogli_file_fattura(percorso: Path) -> list[Path]:
     if percorso.is_dir():
         trovati = [p for p in sorted(percorso.rglob("*"))
-                   if p.is_file() and p.suffix.lower() in ESTENSIONI_FATTURA]
+                   if p.is_file() and p.suffix.lower() in ESTENSIONI_FATTURA
+                   # Ignora i file di servizio macOS presenti in molti zip.
+                   and not p.name.startswith("._") and "__MACOSX" not in p.parts]
         if not trovati:
             raise ErroreParsing(
                 f"Nessun file .xml o .p7m trovato nella cartella '{percorso.name}'."

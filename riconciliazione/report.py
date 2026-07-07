@@ -71,7 +71,8 @@ def _tabella(intestazioni: list[str], righe: list[list], larghezze: list[float],
                      else Paragraph(escape(str(voce)) if voce not in (None, "") else "—",
                                     stili["cella"])
                      for voce in riga])
-    tabella = Table(dati, colWidths=[l * mm for l in larghezze], repeatRows=1)
+    tabella = Table(dati, colWidths=[larghezza * mm for larghezza in larghezze],
+                    repeatRows=1)
     tabella.setStyle(TableStyle([
         ("BACKGROUND", (0, 0), (-1, 0), _GRIGIO_RIGA),
         ("GRID", (0, 0), (-1, -1), 0.4, _BORDO),

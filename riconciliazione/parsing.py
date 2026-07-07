@@ -90,7 +90,11 @@ def parse_importo(valore) -> Decimal | None:
     if isinstance(valore, (int, float, Decimal)):
         if pd.isna(valore):
             return None
-        return Decimal(str(valore)).quantize(Decimal("0.01"))
+        try:
+            return Decimal(str(valore)).quantize(Decimal("0.01"))
+        except (InvalidOperation, ValueError, OverflowError):
+            # inf, NaN o valori fuori scala: non è un importo utilizzabile.
+            return None
 
     s = str(valore).strip()
     if not s:
@@ -135,12 +139,12 @@ def parse_importo(valore) -> Decimal | None:
             s = s.replace(".", "")
 
     try:
-        importo = Decimal(s)
-    except InvalidOperation:
+        importo = Decimal(s).quantize(Decimal("0.01"))
+    except (InvalidOperation, ValueError, OverflowError):
+        # Include valori in notazione scientifica fuori scala ("1E+30"):
+        # meglio scartare la riga con un avviso che interrompere tutto.
         return None
-    if negativo:
-        importo = -importo
-    return importo.quantize(Decimal("0.01"))
+    return -importo if negativo else importo
 
 
 _FORMATI_DATA = [

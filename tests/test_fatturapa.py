@@ -94,6 +94,18 @@ def test_zip(tmp_path):
     assert file.percorso == str(archivio)
 
 
+def test_zip_con_file_di_servizio_macos(tmp_path):
+    # Gli zip creati su Mac contengono __MACOSX/._*.xml: vanno ignorati
+    # senza generare avvisi confusi.
+    archivio = tmp_path / "fatture.zip"
+    with zipfile.ZipFile(archivio, "w") as z:
+        z.writestr("f1.xml", xml_fattura(numero="1"))
+        z.writestr("__MACOSX/._f1.xml", b"\x00\x05\x16\x07spazzatura binaria")
+    file = carica_fatture_xml(archivio)
+    assert len(file.movimenti) == 1
+    assert file.avvisi == []
+
+
 def test_p7m_best_effort(tmp_path):
     # Simula la busta CAdES: XML contiguo con spazzatura binaria attorno.
     xml = xml_fattura().encode()

@@ -161,3 +161,35 @@ def test_download_pdf():
     assert risposta.status_code == 200
     assert risposta.headers["content-type"] == "application/pdf"
     assert risposta.content.startswith(b"%PDF")
+
+
+def test_valore_fuori_scala_non_causa_500():
+    csv_anomalo = (b"Data,Causale,Importo\n"
+                   b"2026-01-01,riga buona,100.00\n"
+                   b"2026-01-02,riga anomala,1E+30\n")
+    risposta = client.post("/api/riconcilia", files={
+        "file_a": ("anomalo.csv", csv_anomalo),
+        "file_b": (REGISTRO.name, REGISTRO.read_bytes()),
+    })
+    assert risposta.status_code == 200
+    corpo = risposta.json()
+    assert corpo["file_a"]["movimenti"] == 1
+    assert any("scartata" in avviso for avviso in corpo["file_a"]["avvisi"])
+
+
+def test_fatture_omonime_non_si_sovrascrivono():
+    xml = sorted((RADICE / "dati_test" / "fatture_xml").glob("*.xml"))[:2]
+    files = [("file_a", (ESTRATTO.name, ESTRATTO.read_bytes()))]
+    files += [("file_b", ("fattura.xml", p.read_bytes())) for p in xml]
+    risposta = client.post("/api/riconcilia", files=files)
+    assert risposta.status_code == 200
+    assert risposta.json()["file_b"]["movimenti"] == 2
+
+
+def test_file_senza_estensione_trattato_come_csv():
+    risposta = client.post("/api/riconcilia", files={
+        "file_a": ("estratto", ESTRATTO.read_bytes()),
+        "file_b": (REGISTRO.name, REGISTRO.read_bytes()),
+    })
+    assert risposta.status_code == 200
+    assert risposta.json()["conteggi"]["riconciliato"] == 5

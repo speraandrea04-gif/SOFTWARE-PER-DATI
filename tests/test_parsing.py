@@ -42,7 +42,11 @@ def test_parse_importo_validi(valore, atteso):
     assert parse_importo(valore) == atteso
 
 
-@pytest.mark.parametrize("valore", ["", "   ", "abc", "12/03/2026", None, True, "€"])
+@pytest.mark.parametrize("valore", [
+    "", "   ", "abc", "12/03/2026", None, True, "€",
+    # Valori fuori scala o non finiti: scartati, mai eccezioni.
+    "1E+30", "1e999", float("inf"), float("-inf"), 10 ** 40, Decimal("NaN"),
+])
 def test_parse_importo_non_validi(valore):
     assert parse_importo(valore) is None
 

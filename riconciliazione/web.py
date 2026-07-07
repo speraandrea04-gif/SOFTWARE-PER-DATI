@@ -53,6 +53,12 @@ async def _scrivi_temporaneo(upload: UploadFile, cartella: str) -> Path:
     if not contenuto:
         raise ErroreParsing(f"Il file '{nome}' è vuoto.")
     destinazione = Path(cartella) / nome
+    # File omonimi (es. fatture con lo stesso nome da cartelle diverse):
+    # rinomina progressiva per non sovrascrivere nulla in silenzio.
+    progressivo = 1
+    while destinazione.exists():
+        progressivo += 1
+        destinazione = Path(cartella) / f"{Path(nome).stem}_{progressivo}{Path(nome).suffix}"
     destinazione.write_bytes(contenuto)
     return destinazione
 
@@ -93,7 +99,11 @@ async def _carica_lato(uploads: list[UploadFile], mappa_testo: str) -> FileNorma
             file.percorso = (nomi[0] if len(nomi) == 1
                              else f"{len(nomi)} fatture elettroniche")
         else:
-            file = carica_file(percorsi[0], mappa)
+            percorso = percorsi[0]
+            if percorso.suffix == "":
+                # File senza estensione: lo si tenta come CSV.
+                percorso = percorso.rename(percorso.with_suffix(".csv"))
+            file = carica_file(percorso, mappa)
             file.percorso = nomi[0]
     return file
 
