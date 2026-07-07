@@ -13,8 +13,10 @@ import sys
 from decimal import Decimal, InvalidOperation
 
 from .export import ETICHETTE, esporta_excel
+from .fatturapa import carica_origine
 from .matching import Abbinamento, Categoria, ConfigMatching, riconcilia
-from .parsing import ErroreParsing, carica_file
+from .parsing import ErroreParsing
+from .report import genera_pdf
 
 
 def _parse_mappa_colonne(testo: str | None) -> dict | None:
@@ -52,12 +54,15 @@ def _parse_decimale(testo: str) -> Decimal:
 
 
 def _descrivi_movimento(abbinamento: Abbinamento, lato: str) -> str:
-    mov = abbinamento.movimento_a if lato == "A" else abbinamento.movimento_b
-    if mov is None:
+    movimenti = abbinamento.movimenti_a if lato == "A" else abbinamento.movimenti_b
+    if not movimenti:
         return "—"
-    data = mov.data.strftime("%d/%m/%Y") if mov.data else "??/??/????"
-    descrizione = mov.descrizione[:45] + ("…" if len(mov.descrizione) > 45 else "")
-    return f"[{lato}{mov.indice:>3}] {data}  {mov.importo:>12}  {descrizione}"
+    righe = []
+    for mov in movimenti:
+        data = mov.data.strftime("%d/%m/%Y") if mov.data else "??/??/????"
+        descrizione = mov.descrizione[:45] + ("…" if len(mov.descrizione) > 45 else "")
+        righe.append(f"[{lato}{mov.indice:>3}] {data}  {mov.importo:>12}  {descrizione}")
+    return "\n  ".join(righe)
 
 
 def _stampa_risultato(risultato, dettaglio: bool) -> None:
@@ -98,7 +103,7 @@ def _stampa_risultato(risultato, dettaglio: bool) -> None:
         for ab in abbinamenti:
             print(f"  {_descrivi_movimento(ab, 'A')}")
             print(f"  {_descrivi_movimento(ab, 'B')}")
-            if ab.movimento_a and ab.movimento_b:
+            if ab.movimenti_a and ab.movimenti_b:
                 print(f"        confidenza {ab.confidenza:.2f} "
                       f"(importo {ab.score_importo:.2f}, data {ab.score_data:.2f}, "
                       f"testo {ab.score_testo:.2f})")
@@ -113,8 +118,12 @@ def main(argv: list[str] | None = None) -> int:
         description="Confronta due file (estratto conto e registro fatture) "
                     "e classifica le righe in riconciliate, discrepanze e non trovate.",
     )
-    parser.add_argument("file_a", help="Primo file (es. estratto conto), CSV o .xlsx")
-    parser.add_argument("file_b", help="Secondo file (es. registro fatture), CSV o .xlsx")
+    parser.add_argument("file_a",
+                        help="Primo file (es. estratto conto): CSV, .xlsx, oppure "
+                             "fatture elettroniche (.xml/.p7m, cartella o .zip)")
+    parser.add_argument("file_b",
+                        help="Secondo file (es. registro fatture): CSV, .xlsx, oppure "
+                             "fatture elettroniche (.xml/.p7m, cartella o .zip)")
     parser.add_argument("--tolleranza-importo", type=_parse_decimale, default=Decimal("0.01"),
                         metavar="EURO", help="Tolleranza sull'importo in euro (default: 0.01)")
     parser.add_argument("--tolleranza-giorni", type=int, default=3, metavar="N",
@@ -130,6 +139,11 @@ def main(argv: list[str] | None = None) -> int:
                              "(es. estratto conto con uscite negative)")
     parser.add_argument("--excel", metavar="FILE.xlsx", default=None,
                         help="Esporta i risultati in un file Excel")
+    parser.add_argument("--pdf", metavar="FILE.pdf", default=None,
+                        help="Genera il report PDF da girare al cliente")
+    parser.add_argument("--no-gruppi", action="store_true",
+                        help="Disattiva la ricerca dei pagamenti cumulativi "
+                             "(un movimento che salda più righe)")
     parser.add_argument("--sintesi", action="store_true",
                         help="Stampa solo i conteggi, senza il dettaglio riga per riga")
     args = parser.parse_args(argv)
@@ -141,11 +155,12 @@ def main(argv: list[str] | None = None) -> int:
         tolleranza_importo=args.tolleranza_importo,
         tolleranza_giorni=args.tolleranza_giorni,
         valore_assoluto=args.valore_assoluto,
+        cerca_gruppi=not args.no_gruppi,
     )
 
     try:
-        file_a = carica_file(args.file_a, args.colonne_a)
-        file_b = carica_file(args.file_b, args.colonne_b)
+        file_a = carica_origine(args.file_a, args.colonne_a)
+        file_b = carica_origine(args.file_b, args.colonne_b)
     except ErroreParsing as errore:
         print(f"Errore: {errore}", file=sys.stderr)
         return 1
@@ -156,6 +171,9 @@ def main(argv: list[str] | None = None) -> int:
     if args.excel:
         percorso = esporta_excel(risultato, args.excel)
         print(f"\nRisultati esportati in: {percorso}")
+    if args.pdf:
+        percorso = genera_pdf(risultato, args.pdf)
+        print(f"Report PDF generato in: {percorso}")
 
     return 0
 

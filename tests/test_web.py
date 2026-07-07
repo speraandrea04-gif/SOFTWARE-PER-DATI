@@ -104,3 +104,60 @@ def test_formato_non_supportato():
     })
     assert risposta.status_code == 400
     assert "Formato non supportato" in risposta.json()["detail"]
+
+
+def test_upload_fatture_xml_multiple():
+    xml = sorted((RADICE / "dati_test" / "fatture_xml").glob("*.xml"))
+    files = [("file_a", (ESTRATTO.name, ESTRATTO.read_bytes()))]
+    files += [("file_b", (p.name, p.read_bytes())) for p in xml]
+    risposta = client.post("/api/riconcilia", files=files)
+    assert risposta.status_code == 200
+    corpo = risposta.json()
+    assert corpo["conteggi"] == {"riconciliato": 5, "discrepanza": 3, "non_trovato": 4}
+    assert corpo["file_b"]["nome"] == "10 fatture elettroniche"
+
+
+def test_piu_file_tabellari_rifiutati():
+    files = [
+        ("file_a", (ESTRATTO.name, ESTRATTO.read_bytes())),
+        ("file_b", (REGISTRO.name, REGISTRO.read_bytes())),
+        ("file_b", ("altro.csv", REGISTRO.read_bytes())),
+    ]
+    risposta = client.post("/api/riconcilia", files=files)
+    assert risposta.status_code == 400
+    assert "più file" in risposta.json()["detail"]
+
+
+def test_pagamenti_cumulativi_via_api():
+    cartella = RADICE / "dati_test"
+    risposta = client.post("/api/riconcilia", files={
+        "file_a": ("estratto.csv", (cartella / "estratto_cumulativo.csv").read_bytes()),
+        "file_b": ("registro.csv", (cartella / "registro_cumulativo.csv").read_bytes()),
+    })
+    assert risposta.status_code == 200
+    corpo = risposta.json()
+    assert corpo["conteggi"]["riconciliato"] == 2
+    cumulativa = next(r for r in corpo["righe"] if "+" in str(r["b"] and r["b"]["riga"]))
+    assert cumulativa["b"]["importo"] == 1830.0
+    assert any("cumulativo" in d for d in cumulativa["dettagli"])
+
+
+def test_cumulativi_disattivabili_via_api():
+    cartella = RADICE / "dati_test"
+    risposta = client.post(
+        "/api/riconcilia",
+        files={
+            "file_a": ("estratto.csv", (cartella / "estratto_cumulativo.csv").read_bytes()),
+            "file_b": ("registro.csv", (cartella / "registro_cumulativo.csv").read_bytes()),
+        },
+        data={"cerca_gruppi": "false"},
+    )
+    assert risposta.json()["conteggi"]["riconciliato"] == 1
+
+
+def test_download_pdf():
+    identificativo = _upload().json()["id"]
+    risposta = client.get(f"/api/risultati/{identificativo}/pdf")
+    assert risposta.status_code == 200
+    assert risposta.headers["content-type"] == "application/pdf"
+    assert risposta.content.startswith(b"%PDF")

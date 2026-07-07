@@ -104,13 +104,13 @@
       <div class="griglia-file">
         <label class="campo-file" id="zona-a">
           <span class="etichetta">📄 File A — Estratto conto</span>
-          <span class="nome-file" id="nome-a">Clicca o trascina qui il file (.csv / .xlsx)</span>
-          <input type="file" id="file-a" accept=".csv,.txt,.xlsx,.xls" required>
+          <span class="nome-file" id="nome-a">Clicca o trascina qui il file (.csv / .xlsx / fatture .xml)</span>
+          <input type="file" id="file-a" accept=".csv,.txt,.xlsx,.xls,.xml,.p7m,.zip" multiple required>
         </label>
         <label class="campo-file" id="zona-b">
-          <span class="etichetta">🧾 File B — Registro fatture</span>
-          <span class="nome-file" id="nome-b">Clicca o trascina qui il file (.csv / .xlsx)</span>
-          <input type="file" id="file-b" accept=".csv,.txt,.xlsx,.xls" required>
+          <span class="etichetta">🧾 File B — Registro fatture o fatture elettroniche</span>
+          <span class="nome-file" id="nome-b">CSV/Excel, oppure le fatture XML dello SDI (anche più file o uno .zip)</span>
+          <input type="file" id="file-b" accept=".csv,.txt,.xlsx,.xls,.xml,.p7m,.zip" multiple required>
         </label>
       </div>
 
@@ -126,6 +126,10 @@
         <div class="spunta">
           <input type="checkbox" id="valore-assoluto">
           <label for="valore-assoluto">Ignora il segno degli importi</label>
+        </div>
+        <div class="spunta">
+          <input type="checkbox" id="cerca-gruppi" checked>
+          <label for="cerca-gruppi">Cerca pagamenti cumulativi (1 movimento ↔ più fatture)</label>
         </div>
       </div>
 
@@ -156,6 +160,7 @@
       <div class="contatori" id="contatori"></div>
       <div class="barra-azioni">
         <button class="secondario" id="scarica-excel">⬇️ Scarica Excel</button>
+        <button class="secondario" id="scarica-pdf">📄 Report PDF</button>
         <button class="secondario" id="nuova">↩︎ Nuova riconciliazione</button>
       </div>
       <ul class="avvisi" id="avvisi" style="display:none"></ul>
@@ -195,8 +200,11 @@ for (const lato of ["a", "b"]) {
   const input = document.getElementById("file-" + lato);
   const nome = document.getElementById("nome-" + lato);
   const mostra = () => {
-    if (input.files.length) {
+    if (input.files.length === 1) {
       nome.textContent = input.files[0].name;
+      zona.classList.add("selezionato");
+    } else if (input.files.length > 1) {
+      nome.textContent = `${input.files.length} file selezionati`;
       zona.classList.add("selezionato");
     }
   };
@@ -223,11 +231,12 @@ document.getElementById("modulo").addEventListener("submit", async e => {
   document.getElementById("caricamento").style.display = "block";
 
   const dati = new FormData();
-  dati.append("file_a", document.getElementById("file-a").files[0]);
-  dati.append("file_b", document.getElementById("file-b").files[0]);
+  for (const f of document.getElementById("file-a").files) dati.append("file_a", f);
+  for (const f of document.getElementById("file-b").files) dati.append("file_b", f);
   dati.append("tolleranza_importo", document.getElementById("toll-importo").value || "0.01");
   dati.append("tolleranza_giorni", document.getElementById("toll-giorni").value || "3");
   dati.append("valore_assoluto", document.getElementById("valore-assoluto").checked);
+  dati.append("cerca_gruppi", document.getElementById("cerca-gruppi").checked);
   dati.append("colonne_a", document.getElementById("colonne-a").value.trim());
   dati.append("colonne_b", document.getElementById("colonne-b").value.trim());
 
@@ -340,6 +349,10 @@ function rigaTabella(riga) {
 
 document.getElementById("scarica-excel").addEventListener("click", () => {
   if (risultato) window.location.href = `/api/risultati/${risultato.id}/excel`;
+});
+
+document.getElementById("scarica-pdf").addEventListener("click", () => {
+  if (risultato) window.location.href = `/api/risultati/${risultato.id}/pdf`;
 });
 
 document.getElementById("nuova").addEventListener("click", () => {

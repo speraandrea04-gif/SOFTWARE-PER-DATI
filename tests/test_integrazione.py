@@ -7,6 +7,7 @@ import pytest
 
 from riconciliazione.cli import main
 from riconciliazione.export import esporta_excel
+from riconciliazione.fatturapa import carica_origine
 from riconciliazione.matching import Categoria, riconcilia
 from riconciliazione.parsing import carica_file
 
@@ -72,12 +73,37 @@ def test_export_excel(risultato, tmp_path):
     assert "Dettagli" in fogli["Discrepanze"].columns
 
 
+def test_cumulativo_end_to_end():
+    da_file = riconcilia(
+        carica_file(RADICE / "dati_test" / "estratto_cumulativo.csv"),
+        carica_file(RADICE / "dati_test" / "registro_cumulativo.csv"),
+    )
+    # Un bonifico da 1.830 salda le fatture 201 (1.220) + 202 (610);
+    # la 203 è un normale match 1:1.
+    assert da_file.conteggi == {"riconciliato": 2, "discrepanza": 0, "non_trovato": 0}
+    cumulativo = next(ab for ab in da_file.abbinamenti if len(ab.movimenti_b) == 2)
+    assert {m.riga_originale["Numero Fattura"] for m in cumulativo.movimenti_b} == \
+        {"FT 2026/201", "FT 2026/202"}
+
+
+def test_fatture_xml_come_input(risultato):
+    """La cartella di fatture XML deve dare gli stessi conteggi del CSV."""
+    da_xml = riconcilia(
+        carica_file(ESTRATTO),
+        carica_origine(RADICE / "dati_test" / "fatture_xml"),
+    )
+    assert da_xml.conteggi == risultato.conteggi
+
+
 def test_cli_end_to_end(tmp_path, capsys):
     excel_out = tmp_path / "out.xlsx"
-    codice = main([str(ESTRATTO), str(REGISTRO), "--excel", str(excel_out)])
+    pdf_out = tmp_path / "report.pdf"
+    codice = main([str(ESTRATTO), str(REGISTRO),
+                   "--excel", str(excel_out), "--pdf", str(pdf_out)])
     output = capsys.readouterr().out
     assert codice == 0
     assert excel_out.exists()
+    assert pdf_out.read_bytes().startswith(b"%PDF")
     assert "Riconciliato: 5" in output
     assert "Discrepanza: 3" in output
     assert "Non trovato: 4" in output

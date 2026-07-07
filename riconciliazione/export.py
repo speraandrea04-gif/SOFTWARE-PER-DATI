@@ -21,22 +21,40 @@ COLONNE_EXPORT = [
 ]
 
 
+def aggrega_lato(movimenti) -> dict:
+    """Riduce uno o più movimenti dello stesso lato a valori mostrabili.
+
+    Con più movimenti (pagamento cumulativo) le righe e le date vengono
+    concatenate, gli importi sommati, le descrizioni unite.
+    """
+    if not movimenti:
+        return {"riga": None, "data": None, "importo": None, "descrizione": None}
+    return {
+        "riga": "+".join(str(m.indice) for m in movimenti),
+        "data": ", ".join(m.data.strftime("%d/%m/%Y") for m in movimenti if m.data) or None,
+        "importo": float(sum(m.importo for m in movimenti)),
+        "descrizione": " + ".join(m.descrizione for m in movimenti if m.descrizione) or None,
+    }
+
+
 def _riga_export(abbinamento: Abbinamento) -> dict:
-    mov_a, mov_b = abbinamento.movimento_a, abbinamento.movimento_b
+    lato_a = aggrega_lato(abbinamento.movimenti_a)
+    lato_b = aggrega_lato(abbinamento.movimenti_b)
+    con_match = bool(abbinamento.movimenti_a and abbinamento.movimenti_b)
     return {
         "Esito": ETICHETTE[abbinamento.categoria],
-        "Riga A": mov_a.indice if mov_a else None,
-        "Data A": mov_a.data.strftime("%d/%m/%Y") if mov_a and mov_a.data else None,
-        "Importo A": float(mov_a.importo) if mov_a else None,
-        "Descrizione A": mov_a.descrizione if mov_a else None,
-        "Riga B": mov_b.indice if mov_b else None,
-        "Data B": mov_b.data.strftime("%d/%m/%Y") if mov_b and mov_b.data else None,
-        "Importo B": float(mov_b.importo) if mov_b else None,
-        "Descrizione B": mov_b.descrizione if mov_b else None,
+        "Riga A": lato_a["riga"],
+        "Data A": lato_a["data"],
+        "Importo A": lato_a["importo"],
+        "Descrizione A": lato_a["descrizione"],
+        "Riga B": lato_b["riga"],
+        "Data B": lato_b["data"],
+        "Importo B": lato_b["importo"],
+        "Descrizione B": lato_b["descrizione"],
         "Δ Importo": float(abbinamento.differenza_importo)
                      if abbinamento.differenza_importo is not None else None,
         "Δ Giorni": abbinamento.differenza_giorni,
-        "Confidenza": abbinamento.confidenza if abbinamento.movimento_a and abbinamento.movimento_b else None,
+        "Confidenza": abbinamento.confidenza if con_match else None,
         "Dettagli": "; ".join(abbinamento.dettagli),
     }
 
