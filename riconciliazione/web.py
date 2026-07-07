@@ -39,6 +39,12 @@ app = FastAPI(title="Riconciliazione Dati — MVP")
 RISULTATI_MASSIMI = 20
 _risultati: OrderedDict[str, RisultatoRiconciliazione] = OrderedDict()
 
+# Limiti di sicurezza sugli upload: evitano che un file enorme (o troppi file)
+# saturino memoria e CPU del processo. Ampi per l'uso reale, ma finiti.
+DIMENSIONE_MASSIMA_FILE = 25 * 1024 * 1024       # 25 MB per singolo file
+DIMENSIONE_MASSIMA_TOTALE = 100 * 1024 * 1024    # 100 MB per lato
+NUMERO_MASSIMO_FILE = 5000                        # fatture XML per lato
+
 _PAGINA = Path(__file__).parent / "static" / "index.html"
 
 
@@ -47,11 +53,16 @@ def pagina_principale() -> str:
     return _PAGINA.read_text(encoding="utf-8")
 
 
-async def _scrivi_temporaneo(upload: UploadFile, cartella: str) -> Path:
+async def _scrivi_temporaneo(upload: UploadFile, cartella: str) -> tuple[Path, int]:
     nome = Path(upload.filename).name  # niente path traversal
     contenuto = await upload.read()
     if not contenuto:
         raise ErroreParsing(f"Il file '{nome}' è vuoto.")
+    if len(contenuto) > DIMENSIONE_MASSIMA_FILE:
+        raise ErroreParsing(
+            f"Il file '{nome}' supera il limite di "
+            f"{DIMENSIONE_MASSIMA_FILE // (1024 * 1024)} MB."
+        )
     destinazione = Path(cartella) / nome
     # File omonimi (es. fatture con lo stesso nome da cartelle diverse):
     # rinomina progressiva per non sovrascrivere nulla in silenzio.
@@ -60,7 +71,7 @@ async def _scrivi_temporaneo(upload: UploadFile, cartella: str) -> Path:
         progressivo += 1
         destinazione = Path(cartella) / f"{Path(nome).stem}_{progressivo}{Path(nome).suffix}"
     destinazione.write_bytes(contenuto)
-    return destinazione
+    return destinazione, len(contenuto)
 
 
 async def _carica_lato(uploads: list[UploadFile], mappa_testo: str) -> FileNormalizzato:
@@ -72,6 +83,10 @@ async def _carica_lato(uploads: list[UploadFile], mappa_testo: str) -> FileNorma
     nomi = [u.filename or "" for u in uploads]
     if not uploads or any(not n for n in nomi):
         raise ErroreParsing("Nessun file selezionato.")
+    if len(uploads) > NUMERO_MASSIMO_FILE:
+        raise ErroreParsing(
+            f"Troppi file in un solo caricamento (massimo {NUMERO_MASSIMO_FILE})."
+        )
     try:
         mappa = _parse_mappa_colonne(mappa_testo or None)
     except ArgumentTypeError as errore:
@@ -92,7 +107,17 @@ async def _carica_lato(uploads: list[UploadFile], mappa_testo: str) -> FileNorma
         )
 
     with tempfile.TemporaryDirectory() as cartella:
-        percorsi = [await _scrivi_temporaneo(upload, cartella) for upload in uploads]
+        percorsi = []
+        totale = 0
+        for upload in uploads:
+            percorso, dimensione = await _scrivi_temporaneo(upload, cartella)
+            percorsi.append(percorso)
+            totale += dimensione
+            if totale > DIMENSIONE_MASSIMA_TOTALE:
+                raise ErroreParsing(
+                    f"Il caricamento supera il limite complessivo di "
+                    f"{DIMENSIONE_MASSIMA_TOTALE // (1024 * 1024)} MB."
+                )
         if xml_o_zip:
             origine = percorsi[0] if len(percorsi) == 1 else Path(cartella)
             file = carica_fatture_xml(origine)

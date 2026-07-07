@@ -349,9 +349,20 @@ def riconcilia(file_a: FileNormalizzato, file_b: FileNormalizzato,
     """Esegue il matching 1:1 tra i movimenti di A e di B."""
     config = config or ConfigMatching()
 
+    # Massima confidenza raggiungibile con testo e data perfetti: se anche
+    # così una coppia non arriva alla soglia, il costoso confronto fuzzy è
+    # inutile e si salta. La potatura è "ammissibile" (usa un limite
+    # superiore), quindi non scarta mai coppie che sarebbero candidate:
+    # il risultato è identico a confrontare tutte le coppie.
+    contributo_massimo_non_importo = config.peso_data + config.peso_testo
+
     candidati: list[Abbinamento] = []
     for mov_a in file_a.movimenti:
         for mov_b in file_b.movimenti:
+            score_importo, _ = punteggio_importo(mov_a, mov_b, config)
+            if (config.peso_importo * score_importo + contributo_massimo_non_importo
+                    < config.soglia_candidato):
+                continue
             abbinamento = confronta(mov_a, mov_b, config)
             if abbinamento.confidenza >= config.soglia_candidato:
                 candidati.append(abbinamento)

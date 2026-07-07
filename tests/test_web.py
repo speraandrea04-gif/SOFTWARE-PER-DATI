@@ -193,3 +193,16 @@ def test_file_senza_estensione_trattato_come_csv():
     })
     assert risposta.status_code == 200
     assert risposta.json()["conteggi"]["riconciliato"] == 5
+
+
+def test_file_troppo_grande_respinto():
+    from riconciliazione.web import DIMENSIONE_MASSIMA_FILE
+    enorme = b"Data,Causale,Importo\n" + b"2026-01-01,x,1.00\n" * 100
+    # Falsifica la dimensione superando il limite senza allocare davvero 25 MB.
+    grande = enorme + b"#" * (DIMENSIONE_MASSIMA_FILE + 1)
+    risposta = client.post("/api/riconcilia", files={
+        "file_a": ("grande.csv", grande),
+        "file_b": (REGISTRO.name, REGISTRO.read_bytes()),
+    })
+    assert risposta.status_code == 400
+    assert "limite" in risposta.json()["detail"].lower()

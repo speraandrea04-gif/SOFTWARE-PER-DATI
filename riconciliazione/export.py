@@ -20,6 +20,19 @@ COLONNE_EXPORT = [
     "Δ Importo", "Δ Giorni", "Confidenza", "Dettagli",
 ]
 
+# Caratteri che, come primo carattere di una cella, farebbero interpretare
+# il testo come formula quando il file viene aperto in Excel/LibreOffice
+# (CSV/Excel injection). Le descrizioni provengono da file esterni, quindi
+# vanno neutralizzate anteponendo un apostrofo (marcatore di testo).
+_PREFISSI_FORMULA = ("=", "+", "-", "@", "\t", "\r")
+
+
+def _neutralizza_formula(valore):
+    """Antepone un apostrofo alle stringhe che Excel leggerebbe come formula."""
+    if isinstance(valore, str) and valore[:1] in _PREFISSI_FORMULA:
+        return "'" + valore
+    return valore
+
 
 def aggrega_lato(movimenti) -> dict:
     """Riduce uno o più movimenti dello stesso lato a valori mostrabili.
@@ -35,6 +48,14 @@ def aggrega_lato(movimenti) -> dict:
         "importo": float(sum(m.importo for m in movimenti)),
         "descrizione": " + ".join(m.descrizione for m in movimenti if m.descrizione) or None,
     }
+
+
+def _riga_export_sicura(abbinamento: Abbinamento) -> dict:
+    """Come _riga_export ma con le celle testuali neutralizzate per Excel."""
+    riga = _riga_export(abbinamento)
+    for colonna in ("Descrizione A", "Descrizione B", "Dettagli", "Esito"):
+        riga[colonna] = _neutralizza_formula(riga[colonna])
+    return riga
 
 
 def _riga_export(abbinamento: Abbinamento) -> dict:
@@ -69,8 +90,8 @@ def esporta_excel(risultato: RisultatoRiconciliazione, percorso) -> object:
 
     conteggi = risultato.conteggi
     riepilogo = pd.DataFrame([
-        {"Voce": "File A", "Valore": risultato.file_a.percorso},
-        {"Voce": "File B", "Valore": risultato.file_b.percorso},
+        {"Voce": "File A", "Valore": _neutralizza_formula(risultato.file_a.percorso)},
+        {"Voce": "File B", "Valore": _neutralizza_formula(risultato.file_b.percorso)},
         {"Voce": "Movimenti file A", "Valore": len(risultato.file_a.movimenti)},
         {"Voce": "Movimenti file B", "Valore": len(risultato.file_b.movimenti)},
         {"Voce": ETICHETTE[Categoria.RICONCILIATO], "Valore": conteggi["riconciliato"]},
@@ -89,7 +110,7 @@ def esporta_excel(risultato: RisultatoRiconciliazione, percorso) -> object:
     with pd.ExcelWriter(percorso, engine="openpyxl") as writer:
         riepilogo.to_excel(writer, sheet_name="Riepilogo", index=False)
         for nome, abbinamenti in fogli.items():
-            righe = [_riga_export(ab) for ab in abbinamenti]
+            righe = [_riga_export_sicura(ab) for ab in abbinamenti]
             df = pd.DataFrame(righe, columns=COLONNE_EXPORT)
             df.to_excel(writer, sheet_name=nome, index=False)
 
